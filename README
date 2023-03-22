@@ -1,0 +1,1 @@
+go run ./rule.go ./cur_rules.json
