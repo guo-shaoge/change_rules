@@ -1,7 +1,6 @@
 package main
 
 import (
-	"time"
 	"fmt"
 	"encoding/json"
 	"os"
@@ -50,13 +49,13 @@ type Rule struct {
 	GroupID          string            `json:"group_id"`                    // mark the source that add the rule
 	ID               string            `json:"id"`                          // unique ID within a group
 	Index            int               `json:"index,omitempty"`             // rule apply order in a group, rule with less ID is applied first when indexes are equal
-	Override         bool              `json:"override,omitempty"`          // when it is true, all rules with less indexes are disabled
+	Override         bool              `json:"-"`          // when it is true, all rules with less indexes are disabled
 	StartKey         []byte            `json:"-"`                           // range start key
 	StartKeyHex      string            `json:"start_key"`                   // hex format start key, for marshal/unmarshal
 	EndKey           []byte            `json:"-"`                           // range end key
 	EndKeyHex        string            `json:"end_key"`                     // hex format end key, for marshal/unmarshal
 	Role             PeerRoleType      `json:"role"`                        // expected role of the peers
-	IsWitness        bool              `json:"is_witness"`                  // when it is true, it means the role is also a witness
+	IsWitness        bool              `json:"-"`                  // when it is true, it means the role is also a witness
 	Count            int               `json:"count"`                       // expected count of the peers
 	LabelConstraints []LabelConstraint `json:"label_constraints,omitempty"` // used to select stores to place peers
 	LocationLabels   []string          `json:"location_labels,omitempty"`   // used to make peers isolated physically
@@ -85,9 +84,14 @@ func main() {
 		panic(err)
 	}
 
-	newConstraint := LabelConstraint{
+	tiflashConstraint := LabelConstraint{
+		Key: "engine",
+		Op: In,
+		Values: []string{"tiflash"},
+	}
+	wnConstraint := LabelConstraint{
 		Key: "engine_role",
-		Op: NotIn,
+		Op: In,
 		Values: []string{"write"},
 	}
 
@@ -106,14 +110,15 @@ func main() {
 				break
 			}
 		}
-		if alreadyDisableWriteRole {
-			fmt.Printf("this rule already disable wn, ignore: %v\n\n", rule)
-			continue
+		if !alreadyDisableWriteRole {
+			panic(fmt.Sprintf("rule should have engine_role constraints: %v", rule))
 		}
-		rule.Index = rule.Index+1
-		rule.Override = true
-		rule.LabelConstraints = append(rule.LabelConstraints, newConstraint)
-		rule.CreateTimestamp = uint64(time.Now().Unix())
+		rule.GroupID = "enable_s3_wn_region"
+		rule.Index = 1
+		rule.Count = 1
+		rule.LabelConstraints = rule.LabelConstraints[:0]
+		rule.LabelConstraints = append(rule.LabelConstraints, wnConstraint)
+		rule.LabelConstraints = append(rule.LabelConstraints, tiflashConstraint)
 		newRules = append(newRules, rule)
 	}
 	newData, err := json.MarshalIndent(newRules, "", "  ")

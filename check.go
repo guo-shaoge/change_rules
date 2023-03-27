@@ -1,7 +1,6 @@
 package main
 
 import (
-	"time"
 	"fmt"
 	"encoding/json"
 	"os"
@@ -85,13 +84,6 @@ func main() {
 		panic(err)
 	}
 
-	newConstraint := LabelConstraint{
-		Key: "engine_role",
-		Op: NotIn,
-		Values: []string{"write"},
-	}
-
-	var newRules Rules
 	for _, rule := range curRules {
 		if rule.GroupID != "tiflash" {
 			panic("got rule that are not tiflash group")
@@ -106,19 +98,9 @@ func main() {
 				break
 			}
 		}
-		if alreadyDisableWriteRole {
-			fmt.Printf("this rule already disable wn, ignore: %v\n\n", rule)
-			continue
+		if !alreadyDisableWriteRole {
+			panic(fmt.Sprintf("this rule doesn't disable wn, ignore: %v", rule))
 		}
-		rule.Index = rule.Index+1
-		rule.Override = true
-		rule.LabelConstraints = append(rule.LabelConstraints, newConstraint)
-		rule.CreateTimestamp = uint64(time.Now().Unix())
-		newRules = append(newRules, rule)
 	}
-	newData, err := json.MarshalIndent(newRules, "", "  ")
-	if err != nil {
-		panic(err)
-	}
-	fmt.Println(string(newData))
+	fmt.Println("check done, all rules has engine_role constraints")
 }
