@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"encoding/json"
 	"os"
+	"strings"
 )
 
 type Rules []Rule
@@ -70,29 +71,17 @@ const (
 	LabelValueEngineRoleWrite = "write"
 )
 
-func getRuleID(keyspace string, tblID string) string {
-	return fmt.Sprintf("keyspace-%s-table-%s-r", keyspace, tblID)
-}
-
 func main() {
-	if len(os.Args) < 4 {
-		panic(fmt.Sprintf("Usage: %v cur_rules.json keyspace tbl0-id tbl1-id", os.Args[0]))
+	if len(os.Args) != 3 {
+		panic(fmt.Sprintf("Usage: %v cur_rules.json keyspace", os.Args[0]))
 	}
 	data, err := os.ReadFile(os.Args[1])
 	if err != nil {
 		panic(err)
 	}
 	keyspace := os.Args[2]
-	tblIDs := make([]string, 0, 0)
-
-	for i := 3; i < len(os.Args); i++ {
-		tblIDs = append(tblIDs, os.Args[i])
-	}
-	ruleIDs := make(map[string]bool)
-	for _, tblID := range tblIDs {
-		ruleID := getRuleID(keyspace, tblID)
-		ruleIDs[ruleID] = true
-	}
+	keyspacePrefix1 := fmt.Sprintf("keyspace-%s-", keyspace)
+	keyspacePrefix2 := fmt.Sprintf("keyspace-id-%s-", keyspace)
 
 	var curRules Rules
 	if err := json.Unmarshal(data, &curRules); err != nil {
@@ -128,8 +117,8 @@ func main() {
 		if !alreadyDisableWriteRole {
 			panic(fmt.Sprintf("rule should have engine_role constraints: %v", rule))
 		}
-		if _, ok := ruleIDs[rule.ID]; !ok {
-			continue;
+		if !strings.Contains(rule.ID, keyspacePrefix1) && !strings.Contains(rule.ID, keyspacePrefix2) {
+			continue
 		}
 
 		rule.GroupID = "enable_s3_wn_region"
